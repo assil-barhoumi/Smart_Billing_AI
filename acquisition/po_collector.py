@@ -3,9 +3,11 @@ import email
 import email.header
 import email.utils
 from email.message import Message
+from datetime import datetime
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from db import insert_order
 
 # ---------- Load .env ----------
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -26,9 +28,9 @@ SAVE_FOLDER.mkdir(parents=True, exist_ok=True)
 
 
 # ---------- Helpers ----------
-def get_timestamp(msg: Message) -> str:
-    """Extract a sortable timestamp string from the email Date header."""
-    return email.utils.parsedate_to_datetime(msg.get("Date")).strftime(TIMESTAMP_FORMAT)
+def get_received_at(msg: Message) -> datetime:
+    """Extract a datetime object from the email Date header."""
+    return email.utils.parsedate_to_datetime(msg.get("Date"))
 
 
 def decode_filename(raw_filename: str) -> str:
@@ -65,10 +67,16 @@ def get_plain_body(msg: Message) -> str:
 
 
 def build_filepath(folder: Path, timestamp: str, filename: str) -> Path:
-    """Build a full file path using timestamp + original filename."""
+    """Build a unique file path using timestamp + original filename.
+    Appends a counter suffix only if a collision occurs.
+    """
     name, ext = os.path.splitext(filename)
-    return folder / f"{timestamp}_{name}{ext}"
-
+    filepath = folder / f"{timestamp}_{name}{ext}"
+    counter = 1
+    while filepath.exists():
+        filepath = folder / f"{timestamp}_{name}_{counter}{ext}"
+        counter += 1
+    return filepath
 
 # ---------- Core logic ----------
 def process_mailbox(mail: imaplib.IMAP4_SSL) -> int:
@@ -85,7 +93,10 @@ def process_mailbox(mail: imaplib.IMAP4_SSL) -> int:
     for email_id in matched_ids:
         _, msg_data = mail.fetch(email_id, "(RFC822)")
         msg = email.message_from_bytes(msg_data[0][1])
-        timestamp = get_timestamp(msg)
+        received_at = get_received_at(msg)
+        timestamp = received_at.strftime(TIMESTAMP_FORMAT)
+        sender_email = email.utils.parseaddr(msg.get("From"))[1]
+        subject = decode_subject(msg.get("Subject", "no_subject"))
 
         # Check if email has any attachment (supported or not)
         has_attachment = any(part.get_filename() for part in msg.walk())
@@ -104,25 +115,37 @@ def process_mailbox(mail: imaplib.IMAP4_SSL) -> int:
             filepath = build_filepath(SAVE_FOLDER, timestamp, filename)
             with open(filepath, "wb") as f:
                 f.write(part.get_payload(decode=True))
-            print(f"  Saved attachment: {filepath}")
+
+            row_id = insert_order(
+                file_path=str(filepath),
+                source="email",
+                sender_email=sender_email,
+                subject=subject,
+                received_at=received_at,
+            )
+            print(f"  Saved attachment: {filepath} (DB id={row_id})")
             saved_attachment = True
             saved_count += 1
 
         if has_attachment and not saved_attachment:
-            # Has attachment but unsupported format — reject entirely
-            print(f"  SKIPPED — attachment format not supported.")
+            print("  SKIPPED — attachment format not supported.")
 
         elif not has_attachment:
-            # No attachment at all — save body text
             body = get_plain_body(msg)
             if body.strip():
-                raw_subject = msg.get("Subject", "no_subject")
-                subject = decode_subject(raw_subject)
                 subject_clean = "".join(c if c.isalnum() or c == "_" else "_" for c in subject)
                 body_path = build_filepath(SAVE_FOLDER, timestamp, f"{subject_clean}.txt")
                 with open(body_path, "w", encoding=DEFAULT_ENCODING) as f:
                     f.write(body)
-                print(f"  Saved email body: {body_path}")
+
+                row_id = insert_order(
+                    file_path=str(body_path),
+                    source="email",
+                    sender_email=sender_email,
+                    subject=subject,
+                    received_at=received_at,
+                )
+                print(f"  Saved email body: {body_path} (DB id={row_id})")
                 saved_count += 1
             else:
                 print("  No body text found — skipping.")
