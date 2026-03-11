@@ -18,7 +18,7 @@ GMAIL_PASSWORD = os.getenv("GMAIL_PASSWORD")
 IMAP_SERVER = "imap.gmail.com"
 IMAP_PORT = 993
 
-SAVE_FOLDER = Path(__file__).resolve().parent.parent / "purchase_orders"
+SAVE_FOLDER = Path(__file__).resolve().parent.parent / "purchase_orders" / "email"
 SUBJECT_KEYWORDS = ["Purchase Order", "Order", "Commande"]
 SUPPORTED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".xlsx", ".csv", ".png", ".jpg", ".jpeg"}
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
@@ -119,7 +119,7 @@ def process_mailbox(mail: imaplib.IMAP4_SSL) -> int:
             row_id = insert_order(
                 file_path=str(filepath),
                 source="email",
-                sender_email=sender_email,
+                sender=sender_email,
                 subject=subject,
                 received_at=received_at,
             )
@@ -141,7 +141,7 @@ def process_mailbox(mail: imaplib.IMAP4_SSL) -> int:
                 row_id = insert_order(
                     file_path=str(body_path),
                     source="email",
-                    sender_email=sender_email,
+                    sender=sender_email,
                     subject=subject,
                     received_at=received_at,
                 )

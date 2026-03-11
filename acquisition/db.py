@@ -20,18 +20,18 @@ def get_connection():
     return psycopg2.connect(**DB_CONFIG)
 
 
-def insert_order(file_path: str, source: str, sender_email: str, subject: str, received_at) -> int:
+def insert_order(file_path: str, source: str, sender: str, subject: str, received_at) -> int:
     """
     Insert a new order record into the orders table.
     Returns the inserted row id.
     """
     sql = """
-        INSERT INTO orders (file_path, source, sender_email, subject, received_at)
+        INSERT INTO orders (file_path, source, sender, subject, received_at)
         VALUES (%s, %s, %s, %s, %s)
         RETURNING id;
     """
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (file_path, source, sender_email, subject, received_at))
+            cur.execute(sql, (file_path, source, sender, subject, received_at))
             row_id = cur.fetchone()[0]
     return row_id
