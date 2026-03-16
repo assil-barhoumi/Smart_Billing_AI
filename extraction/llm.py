@@ -1,16 +1,9 @@
 import os
 import json
-import re
 import base64
-import requests
-from dotenv import load_dotenv
+from pathlib import Path
+from utils import safe_float, call_gemini, strip_json_fences
 
-load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.5-flash:generateContent"
-)
 
 PROMPT = """You are an expert document data extraction assistant. Analyze this formal purchase order carefully.
 
@@ -71,86 +64,39 @@ def _fix_order_number(ref: str | None) -> str | None:
     return ref.replace('O', '0').replace('o', '0')
 
 
-def _safe_float(value) -> float | None:
-    if value is None:
-        return None
-    try:
-        if isinstance(value, str):
-            value = value.strip()
-            value = re.sub(r'[^\d,.]', '', value)
-            if re.match(r'^\d{1,3}(\.\d{3})+(,\d+)?$', value):
-                # European: 6.000,00
-                value = value.replace('.', '').replace(',', '.')
-            elif re.match(r'^\d{1,3}(,\d{3})+(\.\d+)?$', value):
-                # English: 1,000.50
-                value = value.replace(',', '')
-            else:
-                # Simple: 1900,00 or 1900.00
-                value = value.replace(',', '.')
-        return float(value)
-    except (ValueError, TypeError):
-        return None
-
-
-def _file_to_base64(file_path: str) -> tuple[str, str]:
-    ext = os.path.splitext(file_path)[1].lower()
+def _file_to_parts(file_path: str) -> list:
+    ext = Path(file_path).suffix.lower()
     mime_map = {
         ".jpg":  "image/jpeg",
         ".jpeg": "image/jpeg",
         ".png":  "image/png",
         ".pdf":  "application/pdf",
     }
-    mime_type = mime_map.get(ext, "image/jpeg")
+    mime_type = mime_map.get(ext)
+    if mime_type is None:
+        raise ValueError(f"Unsupported file type: {ext}")
     with open(file_path, "rb") as f:
         data = base64.b64encode(f.read()).decode("utf-8")
-    return data, mime_type
+    return [{"inline_data": {"mime_type": mime_type, "data": data}}, {"text": PROMPT}]
 
 
-def _send_file_to_gemini(file_path: str) -> str:
-    """Send image or PDF to Gemini as base64 inline_data."""
-    file_data, mime_type = _file_to_base64(file_path)
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data": file_data,
-                        }
-                    },
-                    {"text": PROMPT},
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 8192,
-        },
-    }
-    response = requests.post(
-        f"{GEMINI_URL}?key={GEMINI_API_KEY}",
-        headers={"Content-Type": "application/json"},
-        json=payload,
-        timeout=60,
-    )
-    response.raise_for_status()
-    return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+def call_gemini_po(file_path: str) -> dict:
+    parts    = _file_to_parts(file_path)
+    raw_text = call_gemini(parts)
+    raw_text = strip_json_fences(raw_text)
 
+    try:
+        result = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Gemini returned invalid JSON: {e}\nRaw: {raw_text[:300]}")
 
-def call_gemini(file_path: str) -> dict:
-    raw_text = _send_file_to_gemini(file_path)
-
-    raw_text = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw_text.strip()).strip()
-
-    result = json.loads(raw_text)
     result["order_number"] = _fix_order_number(result.get("order_number"))
 
     for field in ["amount_ht", "vat_amount", "amount_total"]:
-        result[field] = _safe_float(result.get(field))
+        result[field] = safe_float(result.get(field))
     for item in result.get("line_items") or []:
-        item["quantity"]   = _safe_float(item.get("quantity"))
-        item["unit_price"] = _safe_float(item.get("unit_price"))
-        item["total_line"] = _safe_float(item.get("total_line"))
+        item["quantity"]   = safe_float(item.get("quantity"))
+        item["unit_price"] = safe_float(item.get("unit_price"))
+        item["total_line"] = safe_float(item.get("total_line"))
 
     return result

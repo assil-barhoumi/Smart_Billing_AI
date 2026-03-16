@@ -2,7 +2,7 @@ import sys
 import json
 from pathlib import Path
 
-from llm          import call_gemini
+from llm          import call_gemini_po
 from llm_informal import call_gemini_informal
 from checker      import validate_purchase_order
 
@@ -19,7 +19,7 @@ SUPPORTED_INFORMAL  = {".txt", ".csv", ".xlsx", ".xls", ".jpg", ".jpeg", ".png",
 # ---------- Helpers ----------
 def process_po(file_path: Path) -> dict:
     print(f"  [LLM] Sending {file_path.name} to Gemini...")
-    extracted = call_gemini(str(file_path))
+    extracted = call_gemini_po(str(file_path))
     is_valid, issues = validate_purchase_order(extracted)
     return {
         "file":     file_path.name,

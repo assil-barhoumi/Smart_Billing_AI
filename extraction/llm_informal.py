@@ -1,19 +1,11 @@
-import os
-import re
 import json
 import base64
-import requests
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from dotenv import load_dotenv
+import re
+from utils import safe_float, call_gemini, strip_json_fences
 
-load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.5-flash:generateContent"
-)
 
 PROMPT = """You are an expert document data extraction assistant.
 
@@ -42,7 +34,6 @@ Return ONLY this JSON:
 }"""
 
 
-# ---------- Helpers ----------
 def _extract_date_from_filename(file_path: str) -> str:
     filename = Path(file_path).name
     match = re.match(r'^(\d{8})_\d{6}', filename)
@@ -52,41 +43,7 @@ def _extract_date_from_filename(file_path: str) -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def _safe_float(value) -> float | None:
-    if value is None:
-        return None
-    try:
-        if isinstance(value, str):
-            value = value.strip()
-            value = re.sub(r'[^\d,.]', '', value)
-            if re.match(r'^\d{1,3}(\.\d{3})+(,\d+)?$', value):
-                value = value.replace('.', '').replace(',', '.')
-            elif re.match(r'^\d{1,3}(,\d{3})+(\.\d+)?$', value):
-                value = value.replace(',', '')
-            else:
-                value = value.replace(',', '.')
-        return float(value)
-    except (ValueError, TypeError):
-        return None
-
-
-def _call_gemini(parts: list) -> str:
-    payload = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 8192},
-    }
-    response = requests.post(
-        f"{GEMINI_URL}?key={GEMINI_API_KEY}",
-        headers={"Content-Type": "application/json"},
-        json=payload,
-        timeout=60,
-    )
-    response.raise_for_status()
-    return response.json()["candidates"][0]["content"]["parts"][0]["text"]
-
-
 def _validate(result: dict) -> dict:
-    """Ensure all expected keys exist with correct types. Never raises — fills missing keys with safe defaults."""
     result.setdefault("doc_type", "informal_order")
     result.setdefault("client_name", None)
     result.setdefault("currency", None)
@@ -102,22 +59,21 @@ def _validate(result: dict) -> dict:
                 continue
             cleaned.append({
                 "description": item.get("description") or "",
-                "quantity":    _safe_float(item.get("quantity")),
-                "unit_price":  _safe_float(item.get("unit_price")),
+                "quantity":    safe_float(item.get("quantity")),
+                "unit_price":  safe_float(item.get("unit_price")),
             })
         result["line_items"] = cleaned
 
     return result
 
 
-# ---------- Main ----------
 def call_gemini_informal(file_path: str) -> dict:
     ext = Path(file_path).suffix.lower()
 
     if ext in {".txt", ".csv"}:
         text  = Path(file_path).read_text(encoding="utf-8", errors="ignore")
         parts = [{"text": f"{PROMPT}\n\nDOCUMENT TEXT:\n{text}"}]
-    
+
     elif ext in {".xlsx", ".xls"}:
         df    = pd.read_excel(file_path, dtype=str)
         text  = df.fillna("").to_csv(index=False)
@@ -134,9 +90,8 @@ def call_gemini_informal(file_path: str) -> dict:
         data  = base64.b64encode(Path(file_path).read_bytes()).decode("utf-8")
         parts = [{"inline_data": {"mime_type": mime_type, "data": data}}, {"text": PROMPT}]
 
-    raw_text = _call_gemini(parts)
-    raw_text = re.sub(r'^```(?:json)?\s*', '', raw_text.strip())
-    raw_text = re.sub(r'\s*```$',          '', raw_text.strip())
+    raw_text = call_gemini(parts)
+    raw_text = strip_json_fences(raw_text)
 
     try:
         result = json.loads(raw_text)
