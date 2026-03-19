@@ -5,34 +5,23 @@ from pathlib import Path
 from llm          import call_gemini_po
 from llm_informal import call_gemini_informal
 from checker      import validate_purchase_order
+from db.db        import update_extraction
 
 ROOT                = Path(__file__).resolve().parent.parent
+SUPPORTED_PO        = {".jpg", ".jpeg", ".png", ".pdf"}
+SUPPORTED_INFORMAL  = {".txt", ".csv", ".xlsx", ".xls", ".jpg", ".jpeg", ".png", ".pdf"}
 PURCHASE_ORDERS_DIR = ROOT / "orders" / "purchase_orders"
 INFORMAL_ORDERS_DIR = ROOT / "orders" / "informal_orders"
 RESULTS_PO          = ROOT / "results" / "purchase_order"
 RESULTS_INFORMAL    = ROOT / "results" / "informal_order"
 
-SUPPORTED_PO        = {".jpg", ".jpeg", ".png", ".pdf"}
-SUPPORTED_INFORMAL  = {".txt", ".csv", ".xlsx", ".xls", ".jpg", ".jpeg", ".png", ".pdf"}
-
 
 # ---------- Helpers ----------
-def process_po(file_path: Path) -> dict:
+def process(file_path: Path, llm_fn, doc_type: str) -> dict:
     print(f"  [LLM] Sending {file_path.name} to Gemini...")
-    extracted = call_gemini_po(str(file_path))
+    extracted = llm_fn(str(file_path))
     is_valid, issues = validate_purchase_order(extracted)
-    return {
-        "file":     file_path.name,
-        "is_valid": is_valid,
-        "issues":   issues,
-        "data":     extracted,
-    }
-
-
-def process_informal(file_path: Path) -> dict:
-    print(f"  [LLM] Sending {file_path.name} to Gemini...")
-    extracted = call_gemini_informal(str(file_path))
-    is_valid, issues = validate_purchase_order(extracted)
+    update_extraction(str(file_path), doc_type, extracted, is_valid)
     return {
         "file":     file_path.name,
         "is_valid": is_valid,
@@ -70,12 +59,12 @@ def run_batch(mode: str):
         input_dir   = PURCHASE_ORDERS_DIR
         results_dir = RESULTS_PO
         supported   = SUPPORTED_PO
-        process_fn  = process_po
+        process_fn  = lambda f: process(f, call_gemini_po, "purchase_order")
     else:
         input_dir   = INFORMAL_ORDERS_DIR
         results_dir = RESULTS_INFORMAL
         supported   = SUPPORTED_INFORMAL
-        process_fn  = process_informal
+        process_fn  = lambda f: process(f, call_gemini_informal, "informal_order")
 
     if not input_dir.exists():
         print(f"Error: '{input_dir}' folder not found.")
@@ -118,7 +107,7 @@ def run_single(file_path: str, mode: str):
 
     supported   = SUPPORTED_PO   if mode == "po" else SUPPORTED_INFORMAL
     results_dir = RESULTS_PO     if mode == "po" else RESULTS_INFORMAL
-    process_fn  = process_po     if mode == "po" else process_informal
+    process_fn  = (lambda f: process(f, call_gemini_po, "purchase_order")) if mode == "po" else (lambda f: process(f, call_gemini_informal, "informal_order"))
 
     if path.suffix.lower() not in supported:
         print(f"Error: Unsupported format '{path.suffix}' for mode '{mode}'.")

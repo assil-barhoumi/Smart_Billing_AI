@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS orders (
     file_hash       TEXT                        UNIQUE,     -- SHA-256
     status          CHARACTER VARYING           NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'valid', 'invalid', 'pushed', 'push_failed')),
+    doc_type        CHARACTER VARYING,                  -- 'purchase_order' | 'informal_order'
     extracted_json  JSONB
 
 );
