@@ -5,8 +5,11 @@ import email.utils
 from email.message import Message
 from datetime import datetime
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db.db import insert_order
 
 # ---------- Load .env ----------

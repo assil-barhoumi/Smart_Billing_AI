@@ -2,6 +2,8 @@ import sys
 import json
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from llm          import call_gemini_po
 from llm_informal import call_gemini_informal
 from checker      import validate_purchase_order
@@ -19,14 +21,16 @@ RESULTS_INFORMAL    = ROOT / "results" / "informal_order"
 # ---------- Helpers ----------
 def process(file_path: Path, llm_fn, doc_type: str) -> dict:
     print(f"  [LLM] Sending {file_path.name} to Gemini...")
-    extracted = llm_fn(str(file_path))
+    extracted  = llm_fn(str(file_path))
+    confidence = extracted.pop("confidence", None)
     is_valid, issues = validate_purchase_order(extracted)
-    update_extraction(str(file_path), doc_type, extracted, is_valid)
+    update_extraction(str(file_path), doc_type, extracted, is_valid, confidence)
     return {
-        "file":     file_path.name,
-        "is_valid": is_valid,
-        "issues":   issues,
-        "data":     extracted,
+        "file":       file_path.name,
+        "is_valid":   is_valid,
+        "confidence": confidence,
+        "issues":     issues,
+        "data":       extracted,
     }
 
 
@@ -50,6 +54,12 @@ def print_summary(results: list[dict], mode: str):
             print(f"  • {r['file']}")
             for issue in r["issues"]:
                 print(f"      - {issue}")
+
+    print("\nConfidence scores:")
+    for r in results:
+        conf = r.get("confidence")
+        flag = " ⚠️ LOW" if conf is not None and conf < 0.8 else ""
+        print(f"  • {r['file']}: {conf}{flag}")
     print("=" * 50)
 
 

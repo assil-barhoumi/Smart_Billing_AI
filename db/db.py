@@ -48,13 +48,15 @@ def insert_order(file_path: str, source: str, sender: str, subject: str, receive
 
 # Extraction
 
-def update_extraction(file_path: str, doc_type: str, extracted_json: dict, is_valid: bool) -> None:
+def update_extraction(file_path: str, doc_type: str, extracted_json: dict,
+                      is_valid: bool, confidence: float = None) -> None:
     """Store LLM extraction result and move status to valid/invalid."""
     sql = """
         UPDATE orders
-        SET doc_type       = %s,
-            extracted_json = %s,
-            status         = %s
+        SET doc_type         = %s,
+            extracted_json   = %s,
+            confidence_score = %s,
+            status           = %s
         WHERE file_path = %s;
     """
     status = "valid" if is_valid else "invalid"
@@ -63,6 +65,7 @@ def update_extraction(file_path: str, doc_type: str, extracted_json: dict, is_va
             cur.execute(sql, (
                 doc_type,
                 json.dumps(extracted_json, ensure_ascii=False),
+                confidence,
                 status,
                 file_path,
             ))

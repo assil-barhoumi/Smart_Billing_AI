@@ -52,8 +52,15 @@ Return ONLY a valid JSON object with these exact fields:
       "unit_price": float or null,
       "total_line": float or null
     }
-  ]
+  ],
+  "confidence": float (0.0 to 1.0)
 }
+
+confidence score rules:
+- 0.9-1.0: document is clear, all key fields extracted with certainty
+- 0.7-0.9: most fields clear, minor uncertainty on some values
+- 0.4-0.6: document is partial, blurry, or several fields are ambiguous
+- below 0.4: document is unreadable or too incomplete to trust
 
 Return ONLY the JSON, no markdown, no explanation."""
 

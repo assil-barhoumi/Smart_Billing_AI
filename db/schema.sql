@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS orders (
     status          CHARACTER VARYING           NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'valid', 'invalid', 'pushed', 'push_failed')),
     doc_type        CHARACTER VARYING,                  -- 'purchase_order' | 'informal_order'
-    extracted_json  JSONB
+    extracted_json  JSONB,
+    confidence_score NUMERIC(3,2)                       -- Gemini extraction confidence (between 0 and 1)
 
 );
 
