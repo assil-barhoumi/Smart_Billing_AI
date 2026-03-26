@@ -20,6 +20,7 @@ RESULTS_INFORMAL    = ROOT / "results" / "informal_order"
 
 # ---------- Helpers ----------
 def process(file_path: Path, llm_fn, doc_type: str) -> dict:
+    file_path = file_path.resolve()
     print(f"  [LLM] Sending {file_path.name} to Gemini...")
     extracted  = llm_fn(str(file_path))
     confidence = extracted.pop("confidence", None)

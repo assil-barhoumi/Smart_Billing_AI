@@ -46,6 +46,34 @@ def insert_order(file_path: str, source: str, sender: str, subject: str, receive
             row = cur.fetchone()
             return row[0] if row else None
 
+# Push
+
+def update_push(file_path: str, status: str, odoo_order_id: int = None,
+                needs_review: bool = False, error_message: str = None) -> None:
+    """Update order row after Odoo push attempt."""
+    sql = """
+        UPDATE orders
+        SET status        = %s,
+            odoo_order_id = %s,
+            needs_review  = %s,
+            error_message = %s
+        WHERE file_path = %s;
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (status, odoo_order_id, needs_review, error_message, file_path))
+
+
+def get_sender(file_path: str) -> str | None:
+    """Get sender email/phone for a given file path."""
+    sql = "SELECT sender FROM orders WHERE file_path = %s;"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (file_path,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+
 # Extraction
 
 def update_extraction(file_path: str, doc_type: str, extracted_json: dict,
