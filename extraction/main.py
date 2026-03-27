@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from llm          import call_gemini_po
 from llm_informal import call_gemini_informal
 from checker      import validate_purchase_order
-from db.db        import update_extraction
+from db.db        import update_extraction, get_status
 
 ROOT                = Path(__file__).resolve().parent.parent
 SUPPORTED_PO        = {".jpg", ".jpeg", ".png", ".pdf"}
@@ -81,13 +81,17 @@ def run_batch(mode: str):
         print(f"Error: '{input_dir}' folder not found.")
         sys.exit(1)
 
-    files = sorted(f for f in input_dir.iterdir() if f.suffix.lower() in supported)
+    files = sorted(
+        f for f in input_dir.iterdir()
+        if f.suffix.lower() in supported
+        and get_status(str(f.resolve())) not in ("valid", "invalid", "pushed", "needs_review")
+    )
 
     if not files:
-        print(f"No supported files found in '{input_dir}/'")
+        print(f"No new files to process in '{input_dir}/'")
         sys.exit(0)
 
-    print(f"\n[Batch mode — {mode}] Found {len(files)} file(s) in '{input_dir}/'")
+    print(f"\n[Batch mode — {mode}] Found {len(files)} new file(s) in '{input_dir}/'")
 
     results = []
     for file_path in files:

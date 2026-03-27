@@ -64,6 +64,16 @@ def update_push(file_path: str, status: str, odoo_order_id: int = None,
             cur.execute(sql, (status, odoo_order_id, needs_review, error_message, file_path))
 
 
+def get_status(file_path: str) -> str | None:
+    """Get current status for a given file path."""
+    sql = "SELECT status FROM orders WHERE file_path = %s;"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (file_path,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+
 def get_sender(file_path: str) -> str | None:
     """Get sender email/phone for a given file path."""
     sql = "SELECT sender FROM orders WHERE file_path = %s;"

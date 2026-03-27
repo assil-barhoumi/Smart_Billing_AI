@@ -9,7 +9,7 @@ from odoo_client import (
     get_or_create_partner, create_quotation,
     find_product_by_name, find_partner_by_email,
 )
-from db.db import update_push, get_sender
+from db.db import update_push, get_sender, get_status
 
 
 def _build_lines(line_items: list) -> tuple[list, list]:
@@ -40,6 +40,11 @@ def _build_lines(line_items: list) -> tuple[list, list]:
 
 
 def push_informal(result: dict, file_path: str) -> None:
+    status = get_status(file_path)
+    if status in ("pushed", "needs_review"):
+        print(f"  [SKIP] Already processed (status={status})")
+        return
+
     data = result["data"]
 
     try:
