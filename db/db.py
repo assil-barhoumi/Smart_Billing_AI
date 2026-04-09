@@ -28,21 +28,22 @@ def sha256(file_path: str) -> str:
 
 # Acquisition
 
-def insert_order(file_path: str, source: str, sender: str, subject: str, received_at) -> int | None:
+def insert_order(file_path: str, source: str, sender: str, subject: str,
+                 received_at, doc_type: str = None) -> int | None:
     """
     Insert a new order at acquisition time. Returns the row id.
     Returns None if the file content already exists (duplicate hash).
     """
     file_hash = sha256(file_path)
     sql = """
-        INSERT INTO orders (file_path, source, sender, subject, received_at, file_hash)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO orders (file_path, source, sender, subject, received_at, file_hash, doc_type)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (file_hash) DO NOTHING
         RETURNING id;
     """
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (file_path, source, sender, subject, received_at, file_hash))
+            cur.execute(sql, (file_path, source, sender, subject, received_at, file_hash, doc_type))
             row = cur.fetchone()
             return row[0] if row else None
 
@@ -82,6 +83,67 @@ def get_sender(file_path: str) -> str | None:
             cur.execute(sql, (file_path,))
             row = cur.fetchone()
             return row[0] if row else None
+
+
+# Invoice acquisition
+
+def insert_invoice(file_path: str, source: str, sender: str, subject: str,
+                   received_at) -> int | None:
+    """
+    Insert a new invoice at acquisition time. Returns the row id.
+    Returns None if the file content already exists (duplicate hash).
+    """
+    file_hash = sha256(file_path)
+    sql = """
+        INSERT INTO invoices (file_path, source, sender, subject, received_at, file_hash)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (file_hash) DO NOTHING
+        RETURNING id;
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (file_path, source, sender, subject, received_at, file_hash))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+
+def update_invoice_extraction(file_path: str, extracted_json: dict,
+                               confidence: float, supplier_name: str = None,
+                               invoice_number: str = None, invoice_date=None,
+                               due_date=None, total_ht: float = None,
+                               vat_amount: float = None, total_ttc: float = None,
+                               currency: str = None) -> None:
+    """Store extraction result and update invoice fields."""
+    sql = """
+        UPDATE invoices
+        SET extracted_json   = %s,
+            confidence_score = %s,
+            supplier_name    = %s,
+            invoice_number   = %s,
+            invoice_date     = %s,
+            due_date         = %s,
+            total_ht         = %s,
+            vat_amount       = %s,
+            total_ttc        = %s,
+            currency         = %s,
+            status           = 'pending'
+        WHERE file_path = %s;
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                json.dumps(extracted_json, ensure_ascii=False),
+                confidence,
+                supplier_name,
+                invoice_number,
+                invoice_date,
+                due_date,
+                total_ht,
+                vat_amount,
+                total_ttc,
+                currency,
+                file_path,
+            ))
 
 
 # Extraction

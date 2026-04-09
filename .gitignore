@@ -2,6 +2,11 @@
 __pycache__/
 *.pyc
 .venv/
-orders/
+orders/*
+!orders/.gitkeep
+!orders/purchase_orders/.gitkeep
+!orders/informal_orders/.gitkeep
+invoices/*
+!invoices/.gitkeep
 results/
 explanations.txt

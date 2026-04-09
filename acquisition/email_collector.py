@@ -10,7 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from db.db import insert_order
+from db.db import insert_order, insert_invoice
 
 # ---------- Load .env ----------
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -24,14 +24,18 @@ IMAP_PORT = 993
 ROOT                = Path(__file__).resolve().parent.parent
 SAVE_PO             = ROOT / "orders" / "purchase_orders"
 SAVE_INFORMAL       = ROOT / "orders" / "informal_orders"
+SAVE_INVOICES       = ROOT / "invoices"
 PO_KEYWORDS         = ["Purchase Order", "Bon de commande"]
 INFORMAL_KEYWORDS   = ["Order", "commande", "Request", "Demande"]
-SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".txt", ".csv", ".xlsx", ".xls"}
+INVOICE_KEYWORDS    = ["Facture", "Invoice"]
+SUPPORTED_EXTENSIONS        = {".pdf", ".png", ".jpg", ".jpeg", ".txt", ".csv", ".xlsx", ".xls"}
+INVOICE_EXTENSIONS          = {".pdf", ".png", ".jpg", ".jpeg"}
 TIMESTAMP_FORMAT    = "%Y%m%d_%H%M%S"
 DEFAULT_ENCODING    = "utf-8"
 
 SAVE_PO.mkdir(parents=True, exist_ok=True)
 SAVE_INFORMAL.mkdir(parents=True, exist_ok=True)
+SAVE_INVOICES.mkdir(parents=True, exist_ok=True)
 
 
 # ---------- Helpers ----------
@@ -87,24 +91,29 @@ def build_filepath(folder: Path, timestamp: str, filename: str) -> Path:
 
 # ---------- Core logic ----------
 def process_mailbox(mail: imaplib.IMAP4_SSL) -> int:
-    """Search for order-related unread emails and save attachments or body text."""
-    # Map each email_id → save folder (PO takes priority over informal)
-    routing: dict[bytes, Path] = {}
+    """Search for order/invoice-related unread emails and save attachments or body text."""
+    # Map each email_id → (save folder, doc_type)
+    routing: dict[bytes, tuple[Path, str]] = {}
 
     for keyword in INFORMAL_KEYWORDS:
         _, messages = mail.search(None, f'(UNSEEN SUBJECT "{keyword}")')
         for eid in messages[0].split():
-            routing[eid] = SAVE_INFORMAL
+            routing[eid] = (SAVE_INFORMAL, "informal_order")
+
+    for keyword in INVOICE_KEYWORDS:
+        _, messages = mail.search(None, f'(UNSEEN SUBJECT "{keyword}")')
+        for eid in messages[0].split():
+            routing[eid] = (SAVE_INVOICES, "invoice")
 
     for keyword in PO_KEYWORDS:
         _, messages = mail.search(None, f'(UNSEEN SUBJECT "{keyword}")')
         for eid in messages[0].split():
-            routing[eid] = SAVE_PO  # overrides informal if both match
+            routing[eid] = (SAVE_PO, "purchase_order")
 
     print(f"  Found {len(routing)} unread email(s) matching subject keywords")
     saved_count = 0
 
-    for email_id, save_folder in routing.items():
+    for email_id, (save_folder, doc_type) in routing.items():
         _, msg_data = mail.fetch(email_id, "(RFC822)")
         msg = email.message_from_bytes(msg_data[0][1])
         received_at = get_received_at(msg)
@@ -124,20 +133,31 @@ def process_mailbox(mail: imaplib.IMAP4_SSL) -> int:
             filename = decode_filename(raw_name)
             ext = os.path.splitext(filename)[1].lower()
 
-            if ext not in SUPPORTED_EXTENSIONS:
+            allowed = INVOICE_EXTENSIONS if doc_type == "invoice" else SUPPORTED_EXTENSIONS
+            if ext not in allowed:
                 continue
 
             filepath = build_filepath(save_folder, timestamp, filename)
             with open(filepath, "wb") as f:
                 f.write(part.get_payload(decode=True))
 
-            row_id = insert_order(
-                file_path=str(filepath),
-                source="email",
-                sender=sender_email,
-                subject=subject,
-                received_at=received_at,
-            )
+            if doc_type == "invoice":
+                row_id = insert_invoice(
+                    file_path=str(filepath),
+                    source="email",
+                    sender=sender_email,
+                    subject=subject,
+                    received_at=received_at,
+                )
+            else:
+                row_id = insert_order(
+                    file_path=str(filepath),
+                    source="email",
+                    sender=sender_email,
+                    subject=subject,
+                    received_at=received_at,
+                    doc_type=doc_type,
+                )
             if row_id is None:
                 filepath.unlink()
                 print(f"  DUPLICATE — skipped: {filename}")
@@ -150,28 +170,32 @@ def process_mailbox(mail: imaplib.IMAP4_SSL) -> int:
             print("  SKIPPED — attachment format not supported.")
 
         elif not has_attachment:
-            body = get_plain_body(msg)
-            if body.strip():
-                subject_clean = "".join(c if c.isalnum() or c == "_" else "_" for c in subject)
-                body_path = build_filepath(save_folder, timestamp, f"{subject_clean}.txt")
-                with open(body_path, "w", encoding=DEFAULT_ENCODING) as f:
-                    f.write(body)
-
-                row_id = insert_order(
-                    file_path=str(body_path),
-                    source="email",
-                    sender=sender_email,
-                    subject=subject,
-                    received_at=received_at,
-                )
-                if row_id is None:
-                    body_path.unlink()
-                    print("  DUPLICATE — body already exists, skipped.")
-                else:
-                    print(f"  Saved email body: {body_path} (DB id={row_id})")
-                    saved_count += 1
+            if doc_type == "invoice":
+                print("  SKIPPED — invoice email has no attachment, ignored.")
             else:
-                print("  No body text found — skipping.")
+                body = get_plain_body(msg)
+                if body.strip():
+                    subject_clean = "".join(c if c.isalnum() or c == "_" else "_" for c in subject)
+                    body_path = build_filepath(save_folder, timestamp, f"{subject_clean}.txt")
+                    with open(body_path, "w", encoding=DEFAULT_ENCODING) as f:
+                        f.write(body)
+
+                    row_id = insert_order(
+                        file_path=str(body_path),
+                        source="email",
+                        sender=sender_email,
+                        subject=subject,
+                        received_at=received_at,
+                        doc_type=doc_type,
+                    )
+                    if row_id is None:
+                        body_path.unlink()
+                        print("  DUPLICATE — body already exists, skipped.")
+                    else:
+                        print(f"  Saved email body: {body_path} (DB id={row_id})")
+                        saved_count += 1
+                else:
+                    print("  No body text found — skipping.")
 
     return saved_count
 
