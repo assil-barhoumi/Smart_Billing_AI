@@ -126,7 +126,7 @@ def update_invoice_extraction(file_path: str, extracted_json: dict,
             vat_amount       = %s,
             total_ttc        = %s,
             currency         = %s,
-            status           = 'pending'
+            status           = 'extracted'
         WHERE file_path = %s;
     """
     with get_connection() as conn:
@@ -144,6 +144,16 @@ def update_invoice_extraction(file_path: str, extracted_json: dict,
                 currency,
                 file_path,
             ))
+
+
+def get_invoice_status(file_path: str) -> str | None:
+    """Get current status for a given invoice file path."""
+    sql = "SELECT status FROM invoices WHERE file_path = %s;"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (file_path,))
+            row = cur.fetchone()
+            return row[0] if row else None
 
 
 # Extraction

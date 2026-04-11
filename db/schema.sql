@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     received_at      TIMESTAMP NOT NULL,
     file_hash        TEXT UNIQUE,
     status           VARCHAR NOT NULL DEFAULT 'pending'
-                     CHECK (status IN ('pending', 'validated', 'rejected', 'paid')),
+                     CHECK (status IN ('pending', 'extracted', 'validated')),
     extracted_json   JSONB,
     confidence_score NUMERIC(3,2),
     supplier_name    VARCHAR,

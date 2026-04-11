@@ -6,16 +6,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from llm          import call_gemini_po
 from llm_informal import call_gemini_informal
+from llm_invoice  import call_groq_invoice as call_invoice    # switch to call_ollama_invoice in production
 from checker      import validate_purchase_order
-from db.db        import update_extraction, get_status
+from db.db        import update_extraction, update_invoice_extraction, get_status
 
 ROOT                = Path(__file__).resolve().parent.parent
 SUPPORTED_PO        = {".jpg", ".jpeg", ".png", ".pdf"}
 SUPPORTED_INFORMAL  = {".txt", ".csv", ".xlsx", ".xls", ".jpg", ".jpeg", ".png", ".pdf"}
+SUPPORTED_INVOICE   = {".jpg", ".jpeg", ".png", ".pdf"}
 PURCHASE_ORDERS_DIR = ROOT / "orders" / "purchase_orders"
 INFORMAL_ORDERS_DIR = ROOT / "orders" / "informal_orders"
+INVOICES_DIR        = ROOT / "invoices"
 RESULTS_PO          = ROOT / "results" / "purchase_order"
 RESULTS_INFORMAL    = ROOT / "results" / "informal_order"
+RESULTS_INVOICE     = ROOT / "results" / "invoice"
 
 
 # ---------- Helpers ----------
@@ -64,7 +68,85 @@ def print_summary(results: list[dict], mode: str):
     print("=" * 50)
 
 
+# ---------- Invoice process ----------
+def process_invoice(file_path: Path) -> dict:
+    file_path = file_path.resolve()
+    print(f"  [LLM] Sending {file_path.name} to Groq...")
+    extracted  = call_invoice(str(file_path))
+    confidence = extracted.pop("confidence", None)
+
+    update_invoice_extraction(
+        file_path      = str(file_path),
+        extracted_json = extracted,
+        confidence     = confidence,
+        supplier_name  = extracted.get("supplier_name"),
+        invoice_number = extracted.get("invoice_number"),
+        invoice_date   = extracted.get("date"),
+        total_ht       = extracted.get("total_ht"),
+        vat_amount     = extracted.get("vat_amount"),
+        total_ttc      = extracted.get("total_ttc"),
+        currency       = extracted.get("currency"),
+    )
+    return {
+        "file":       file_path.name,
+        "confidence": confidence,
+        "data":       extracted,
+    }
+
+
 # ---------- Runners ----------
+def run_invoice_batch():
+    from db.db import get_invoice_status, insert_invoice
+    from datetime import datetime
+
+    all_files = sorted(
+        f for f in INVOICES_DIR.iterdir()
+        if f.suffix.lower() in SUPPORTED_INVOICE
+        and f.name != ".gitkeep"
+    )
+
+    files = []
+    for f in all_files:
+        status = get_invoice_status(str(f.resolve()))
+        if status is None:
+            row_id = insert_invoice(str(f.resolve()), source="manual",
+                                    sender=None, subject=None, received_at=datetime.now())
+            if row_id is None:
+                print(f"  DUPLICATE — skipped: {f.name}")
+                continue
+            files.append(f)
+        elif status == "pending":
+            files.append(f)
+
+    if not files:
+        print(f"No new invoices to process in '{INVOICES_DIR}/'")
+        sys.exit(0)
+
+    print(f"\n[Invoice batch] Found {len(files)} file(s) in '{INVOICES_DIR}/'")
+    results = []
+    for file_path in files:
+        print(f"\nProcessing: {file_path.name}")
+        try:
+            result = process_invoice(file_path)
+        except Exception as e:
+            print(f"  [ERROR] {e}")
+            result = {"file": file_path.name, "confidence": None, "data": {}}
+        out_path = RESULTS_INVOICE / f"{file_path.stem}.json"
+        save_result(result, out_path)
+        print(f"  Confidence : {result.get('confidence')}")
+        print(f"  Supplier   : {result['data'].get('supplier_name')}")
+        print(f"  Invoice No.: {result['data'].get('invoice_number')}")
+        print(f"  Total TTC  : {result['data'].get('total_ttc')}")
+        print(f"  [Saved] {out_path}")
+        results.append(result)
+
+    print(f"\n{'='*50}")
+    print(f"SUMMARY [invoice]: {len(results)} file(s) processed")
+    for r in results:
+        print(f"  • {r['file']}: confidence={r.get('confidence')}")
+    print("=" * 50)
+
+
 def run_batch(mode: str):
     if mode == "po":
         input_dir   = PURCHASE_ORDERS_DIR
@@ -144,16 +226,19 @@ if __name__ == "__main__":
         print("Usage:")
         print("  python main.py po                  # batch all purchase orders")
         print("  python main.py informal            # batch all informal orders")
+        print("  python main.py invoice             # batch all invoices")
         print("  python main.py po <file>           # single purchase order")
         print("  python main.py informal <file>     # single informal order")
         sys.exit(0)
 
     mode = args[0]
-    if mode not in {"po", "informal"}:
-        print(f"Error: Unknown mode '{mode}'. Use 'po' or 'informal'.")
+    if mode not in {"po", "informal", "invoice"}:
+        print(f"Error: Unknown mode '{mode}'. Use 'po', 'informal', or 'invoice'.")
         sys.exit(1)
 
-    if len(args) == 2:
+    if mode == "invoice":
+        run_invoice_batch()
+    elif len(args) == 2:
         run_single(args[1], mode)
     else:
         run_batch(mode)

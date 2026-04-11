@@ -32,7 +32,7 @@ def safe_float(value) -> float | None:
 def call_gemini(parts: list) -> str:
     payload = {
         "contents": [{"parts": parts}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 8192},
+        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 8192},
     }
     response = requests.post(
         f"{GEMINI_URL}?key={GEMINI_API_KEY}",

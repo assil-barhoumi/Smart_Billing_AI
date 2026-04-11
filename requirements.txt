@@ -6,3 +6,5 @@ python-multipart
 requests
 pandas
 openpyxl
+pymupdf
+groq
