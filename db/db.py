@@ -156,6 +156,65 @@ def get_invoice_status(file_path: str) -> str | None:
             return row[0] if row else None
 
 
+# Invoice validation
+
+def get_invoice(invoice_id: int) -> dict | None:
+    """Get a single invoice by ID."""
+    sql = "SELECT * FROM invoices WHERE id = %s;"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (invoice_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            cols = [desc[0] for desc in cur.description]
+            return dict(zip(cols, row))
+
+
+def get_invoices(status: str = None) -> list[dict]:
+    """Get all invoices, optionally filtered by status."""
+    sql = "SELECT * FROM invoices"
+    params = []
+    if status:
+        sql += " WHERE status = %s"
+        params.append(status)
+    sql += " ORDER BY received_at DESC;"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            cols = [desc[0] for desc in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def validate_invoice(invoice_id: int, corrections: dict = None) -> None:
+    """Mark invoice as validated, optionally applying field corrections."""
+    from datetime import datetime
+    fields = {
+        "status": "validated",
+        "validated_at": datetime.now(),
+    }
+    if corrections:
+        allowed = {"supplier_name", "invoice_number", "invoice_date", "due_date",
+                   "total_ht", "vat_amount", "total_ttc", "currency"}
+        for k, v in corrections.items():
+            if k in allowed:
+                fields[k] = v
+
+    set_clause = ", ".join(f"{k} = %s" for k in fields)
+    sql = f"UPDATE invoices SET {set_clause} WHERE id = %s;"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (*fields.values(), invoice_id))
+
+
+def reject_invoice(invoice_id: int) -> None:
+    """Mark invoice as rejected."""
+    sql = "UPDATE invoices SET status = 'rejected' WHERE id = %s;"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (invoice_id,))
+
+
 # Extraction
 
 def update_extraction(file_path: str, doc_type: str, extracted_json: dict,
