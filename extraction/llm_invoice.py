@@ -44,6 +44,7 @@ LINE ITEMS RULES:
 - IGNORE summary rows (Total, TVA, HT, Remise, Discount)
 - If quantity is missing use 1.0
 - If unit_price is missing but total is present, use total
+- item_type: "product" if it is a physical good (furniture, equipment, food, parts...), "service" if it is a service (consulting, delivery, maintenance, subscription...)
 
 Return ONLY this valid JSON, no explanation, no markdown:
 {
@@ -56,7 +57,8 @@ Return ONLY this valid JSON, no explanation, no markdown:
       "description": null,
       "quantity": null,
       "unit_price": null,
-      "total_line": null
+      "total_line": null,
+      "item_type": null
     }
   ],
   "total_ht": null,

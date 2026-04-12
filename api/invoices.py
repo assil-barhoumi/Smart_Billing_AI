@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from db.db import get_invoice, get_invoices, validate_invoice, reject_invoice
+from db.db import get_invoice, get_invoices, validate_invoice, reject_invoice, update_invoice_odoo_id
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -65,3 +65,24 @@ def reject(invoice_id: int):
 
     reject_invoice(invoice_id)
     return {"message": "Invoice rejected", "id": invoice_id}
+
+
+@router.post("/{invoice_id}/push-odoo")
+def push_to_odoo(invoice_id: int):
+    """Push a validated invoice to Odoo as a vendor bill."""
+    from odoo.push_invoice_to_odoo import push_invoice
+
+    invoice = get_invoice(invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice["status"] != "validated":
+        raise HTTPException(status_code=400, detail="Only validated invoices can be pushed to Odoo")
+    if invoice["odoo_invoice_id"]:
+        raise HTTPException(status_code=400, detail=f"Already pushed to Odoo (id={invoice['odoo_invoice_id']})")
+
+    try:
+        odoo_id = push_invoice(invoice)
+        update_invoice_odoo_id(invoice_id, odoo_id)
+        return {"message": "Invoice pushed to Odoo successfully", "odoo_invoice_id": odoo_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Odoo push failed: {str(e)}")

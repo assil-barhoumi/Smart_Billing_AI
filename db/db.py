@@ -215,6 +215,14 @@ def reject_invoice(invoice_id: int) -> None:
             cur.execute(sql, (invoice_id,))
 
 
+def update_invoice_odoo_id(invoice_id: int, odoo_invoice_id: int) -> None:
+    """Save Odoo vendor bill ID after successful push."""
+    sql = "UPDATE invoices SET odoo_invoice_id = %s WHERE id = %s;"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (odoo_invoice_id, invoice_id))
+
+
 # Extraction
 
 def update_extraction(file_path: str, doc_type: str, extracted_json: dict,
