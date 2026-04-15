@@ -25,6 +25,8 @@ Extract information based on meaning and context, not exact wording.
 
 FIELD RULES:
 - supplier_name: the company or person ISSUING the invoice (selling) — NOT "Bill To", NOT "Ship To"
+- supplier_street: full address of the supplier (without country)
+- supplier_country: country in English always (Morocco not Maroc, Tunisia not Tunisie, Algeria not Algérie)
 - invoice_number: look for "Facture N°", "N° Facture", "Invoice No", "Réf", "رقم الفاتورة"
 - date: invoice date, return as YYYY-MM-DD always
 - currency: ISO code — DZD, MAD, TND, EUR, USD (DA→DZD, DH→MAD, DT→TND, €→EUR, $→USD). If no symbol, detect from country in address.
@@ -49,7 +51,8 @@ LINE ITEMS RULES:
 Return ONLY this valid JSON, no explanation, no markdown:
 {
   "supplier_name": null,
-  "supplier_address": null,
+  "supplier_street": null,
+  "supplier_country": null,
   "invoice_number": null,
   "date": null,
   "line_items": [
@@ -73,6 +76,7 @@ confidence rules:
 - 0.7-0.9: most fields clear, minor uncertainty
 - 0.4-0.7: partial or ambiguous document
 - below 0.4: unreadable or too incomplete"""
+
 
 OLLAMA_MODEL = "qwen2.5vl:3b"
 

@@ -70,10 +70,27 @@ def print_summary(results: list[dict], mode: str):
 
 # ---------- Invoice process ----------
 def process_invoice(file_path: Path) -> dict:
+    from db.db import find_supplier, insert_supplier  # insert_supplier used for known supplier last_seen update
+
     file_path = file_path.resolve()
+
     print(f"  [LLM] Sending {file_path.name} to Groq...")
     extracted  = call_invoice(str(file_path))
     confidence = extracted.pop("confidence", None)
+
+    supplier_name  = extracted.get("supplier_name")
+    known_supplier = find_supplier(supplier_name) if supplier_name else None
+
+    if known_supplier:
+        # Known supplier: override static fields with validated DB values
+        print(f"  [Supplier] Known supplier: {known_supplier['name']} — loading from DB")
+        extracted["supplier_name"]    = known_supplier["name"]
+        extracted["supplier_street"]  = known_supplier["street"]
+        extracted["supplier_country"] = known_supplier["country"]
+        # update last_seen + invoice_count
+        insert_supplier(known_supplier["name"])
+    elif supplier_name:
+        print(f"  [Supplier] New supplier: {supplier_name} — will be saved to registry after admin validation")
 
     update_invoice_extraction(
         file_path      = str(file_path),

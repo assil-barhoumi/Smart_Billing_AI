@@ -2,7 +2,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from odoo_config import connect, DB, PASSWORD
+from db.db import update_supplier_odoo_id
 
 uid, models = connect()
 
@@ -23,18 +25,21 @@ def _create(model, vals):
     return models.execute_kw(DB, uid, PASSWORD, model, 'create', [vals])
 
 
-def get_or_create_supplier(name: str) -> int:
+def get_or_create_supplier(name: str, street: str = None, country: str = None) -> int:
     """Find existing supplier or create a new one. Returns partner_id."""
     partner = _search('res.partner', [['name', 'ilike', name], ['supplier_rank', '>', 0]], ['id', 'name'])
     if partner:
         return partner['id']
 
-    partner_id = _create('res.partner', {
+    vals = {
         'name'         : name,
         'supplier_rank': 1,
         'comment'      : 'Auto-created by AutomatingSales',
-    })
-    return partner_id
+    }
+    if street:  vals['street']  = street
+    if country: vals['country'] = country
+
+    return _create('res.partner', vals)
 
 
 def get_or_create_product(description: str, item_type: str = 'consu') -> int:
@@ -59,11 +64,16 @@ def push_invoice(invoice: dict) -> int:
     Returns the Odoo account.move ID.
     """
     supplier_name = invoice.get('supplier_name') or 'Unknown Supplier'
-    partner_id    = get_or_create_supplier(supplier_name)
+    extracted     = invoice.get('extracted_json') or {}
+    partner_id    = get_or_create_supplier(
+        name    = supplier_name,
+        street  = extracted.get('supplier_street'),
+        country = extracted.get('supplier_country'),
+    )
+    update_supplier_odoo_id(supplier_name, partner_id)
 
     # Build invoice lines
     line_items = []
-    extracted  = invoice.get('extracted_json') or {}
     for item in extracted.get('line_items') or []:
         description = item.get('description') or 'Service'
         raw_type  = item.get('item_type') or 'service'

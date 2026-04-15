@@ -54,3 +54,18 @@ CREATE INDEX IF NOT EXISTS idx_invoices_status         ON invoices (status);
 CREATE INDEX IF NOT EXISTS idx_invoices_payment_status ON invoices (payment_status);
 CREATE INDEX IF NOT EXISTS idx_invoices_received_at    ON invoices (received_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invoices_due_date       ON invoices (due_date);
+
+-- Supplier registry
+CREATE TABLE IF NOT EXISTS suppliers (
+    id               SERIAL PRIMARY KEY,
+    name             VARCHAR NOT NULL UNIQUE,
+    street           TEXT,
+    country          VARCHAR,
+    email            VARCHAR,
+    odoo_partner_id  INTEGER,                   -- linked Odoo res.partner ID
+    first_seen       TIMESTAMP NOT NULL DEFAULT NOW(),
+    last_seen        TIMESTAMP NOT NULL DEFAULT NOW(),
+    invoice_count    INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers (LOWER(name));

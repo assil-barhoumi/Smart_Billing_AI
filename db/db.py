@@ -156,6 +156,47 @@ def get_invoice_status(file_path: str) -> str | None:
             return row[0] if row else None
 
 
+# Supplier registry
+
+def find_supplier(name: str) -> dict | None:
+    """Find supplier by case-insensitive name. Returns supplier dict or None."""
+    sql = "SELECT * FROM suppliers WHERE LOWER(name) = LOWER(%s);"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (name.strip(),))
+            row = cur.fetchone()
+            if not row:
+                return None
+            cols = [desc[0] for desc in cur.description]
+            return dict(zip(cols, row))
+
+
+def insert_supplier(name: str, street: str = None, country: str = None,
+                    email: str = None, odoo_partner_id: int = None) -> int:
+    """Insert a new supplier into the registry. Returns supplier ID."""
+    sql = """
+        INSERT INTO suppliers (name, street, country, email, odoo_partner_id)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (name) DO UPDATE
+            SET last_seen     = NOW(),
+                invoice_count = suppliers.invoice_count + 1
+        RETURNING id;
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (name.strip(), street, country,
+                              email, odoo_partner_id))
+            return cur.fetchone()[0]
+
+
+def update_supplier_odoo_id(name: str, odoo_partner_id: int) -> None:
+    """Save Odoo partner ID to supplier registry."""
+    sql = "UPDATE suppliers SET odoo_partner_id = %s WHERE LOWER(name) = LOWER(%s);"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (odoo_partner_id, name.strip()))
+
+
 # Invoice validation
 
 def get_invoice(invoice_id: int) -> dict | None:
@@ -187,7 +228,8 @@ def get_invoices(status: str = None) -> list[dict]:
 
 
 def validate_invoice(invoice_id: int, corrections: dict = None) -> None:
-    """Mark invoice as validated, optionally applying field corrections."""
+    """Mark invoice as validated, optionally applying field corrections.
+    Also saves/updates the supplier in the registry."""
     from datetime import datetime
     fields = {
         "status": "validated",
@@ -205,6 +247,17 @@ def validate_invoice(invoice_id: int, corrections: dict = None) -> None:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (*fields.values(), invoice_id))
+
+    # Save supplier to registry after validation
+    invoice = get_invoice(invoice_id)
+    supplier_name = fields.get("supplier_name") or invoice.get("supplier_name")
+    if supplier_name:
+        extracted = invoice.get("extracted_json") or {}
+        insert_supplier(
+            name    = supplier_name,
+            street  = extracted.get("supplier_street"),
+            country = extracted.get("supplier_country"),
+        )
 
 
 def reject_invoice(invoice_id: int) -> None:
