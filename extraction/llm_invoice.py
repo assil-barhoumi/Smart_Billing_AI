@@ -12,7 +12,7 @@ try:
 except ImportError:
     OLLAMA_AVAILABLE = False
 
-from utils import safe_float, strip_json_fences
+from extraction.utils import safe_float, strip_json_fences
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"
@@ -146,8 +146,13 @@ def call_groq_invoice(file_path: str) -> dict:
         max_tokens=8192,
     )
 
-    raw = response.choices[0].message.content
+    raw = response.choices[0].message.content or ""
     raw = strip_json_fences(raw)
+
+    # Handle cases where the model prepends explanation text before the JSON
+    start = raw.find("{")
+    if start > 0:
+        raw = raw[start:]
 
     try:
         result = json.loads(raw)

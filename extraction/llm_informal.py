@@ -4,7 +4,7 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 import re
-from utils import safe_float, call_gemini, strip_json_fences
+from extraction.utils import safe_float, call_gemini, strip_json_fences
 
 
 PROMPT = """You are an expert document data extraction assistant.
