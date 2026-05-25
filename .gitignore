@@ -10,3 +10,5 @@ invoices/*
 !invoices/.gitkeep
 results/
 explanations.txt
+.claude/
+settings.local.json

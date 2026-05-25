@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_smart_billing_invoice_admin,smart.billing.invoice (admin),model_smart_billing_invoice,base.group_system,1,1,1,1
+access_smart_billing_invoice_user,smart.billing.invoice (user),model_smart_billing_invoice,base.group_user,1,0,0,0
