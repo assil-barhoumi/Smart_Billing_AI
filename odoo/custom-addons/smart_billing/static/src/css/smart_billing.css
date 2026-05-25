@@ -1,0 +1,44 @@
+.o_sb_kanban .o_kanban_record {
+    margin-bottom: 10px;
+}
+
+.o_sb_side_by_side {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    margin-bottom: 16px;
+}
+
+.o_sb_img_col {
+    flex: 0 0 65%;
+    width: 65%;
+}
+
+.o_sb_fields_col {
+    flex: 0 0 calc(35% - 24px);
+    width: calc(35% - 24px);
+}
+
+.o_sb_col_title {
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.o_sb_img_col .o_field_image {
+    display: block;
+    width: 100%;
+}
+
+.o_sb_img_col .o_field_image img {
+    width: 100%;
+    max-height: 1100px;
+    object-fit: contain;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    background: #f8f9fa;
+}

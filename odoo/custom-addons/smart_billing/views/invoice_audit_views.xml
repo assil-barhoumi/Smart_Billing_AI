@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <record id="view_sb_invoice_search" model="ir.ui.view">
+    <field name="name">smart.billing.invoice.search</field>
+    <field name="model">smart.billing.invoice</field>
+    <field name="arch" type="xml">
+      <search>
+        <field name="supplier_name"/>
+        <field name="invoice_number"/>
+        <filter name="pending"        string="Pending Review"  domain="[('pipeline_status','=','pending')]"/>
+        <filter name="pushed"         string="Pushed"          domain="[('pipeline_status','=','pushed')]"/>
+        <filter name="rejected"       string="Rejected"        domain="[('pipeline_status','=','rejected')]"/>
+        <filter name="low_confidence" string="Low Confidence"  domain="[('confidence','&lt;',0.7)]"/>
+        <filter name="group_status"   string="Status"          context="{'group_by':'pipeline_status'}"/>
+        <filter name="group_supplier" string="Supplier"        context="{'group_by':'supplier_name'}"/>
+      </search>
+    </field>
+  </record>
+
+  <record id="view_sb_invoice_kanban" model="ir.ui.view">
+    <field name="name">smart.billing.invoice.kanban</field>
+    <field name="model">smart.billing.invoice</field>
+    <field name="arch" type="xml">
+      <kanban class="o_sb_kanban" default_group_by="pipeline_status" group_create="false" quick_create="false">
+        <field name="pipeline_status"/>
+        <field name="confidence"/>
+        <field name="total_ttc"/>
+        <field name="currency_code"/>
+        <field name="invoice_date"/>
+        <field name="odoo_invoice_id"/>
+        <templates>
+          <t t-name="card">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <strong class="text-truncate" style="max-width:100%">
+                <field name="invoice_number"/>
+              </strong>
+            </div>
+            <div class="text-muted small text-truncate">
+              <i class="fa fa-building-o me-1" title="Supplier"/>
+              <field name="supplier_name"/>
+            </div>
+            <hr class="my-1"/>
+            <div class="d-flex justify-content-between small">
+              <span><i class="fa fa-calendar-o me-1" title="Date"/><field name="invoice_date"/></span>
+              <strong><field name="total_ttc"/> <field name="currency_code"/></strong>
+            </div>
+            <div class="small mt-1">
+              Confidence:
+              <span t-attf-class="fw-bold {{ record.confidence.raw_value &lt; 0.7 ? 'text-danger' : 'text-success' }}">
+                <field name="confidence"/>
+              </span>
+            </div>
+            <div t-if="record.odoo_invoice_id.raw_value" class="mt-1 small">
+              <span class="badge bg-info text-white">Odoo #<field name="odoo_invoice_id"/></span>
+            </div>
+          </t>
+        </templates>
+      </kanban>
+    </field>
+  </record>
+
+  <record id="view_sb_invoice_list" model="ir.ui.view">
+    <field name="name">smart.billing.invoice.list</field>
+    <field name="model">smart.billing.invoice</field>
+    <field name="arch" type="xml">
+      <list decoration-danger="confidence &lt; 0.4"
+            decoration-warning="confidence &lt; 0.7 and confidence &gt;= 0.4"
+            decoration-success="pipeline_status == 'pushed'">
+        <field name="invoice_number"/>
+        <field name="supplier_name"/>
+        <field name="invoice_date"/>
+        <field name="total_ht"      optional="hide"/>
+        <field name="vat_amount"    optional="hide"/>
+        <field name="total_ttc"/>
+        <field name="currency_code" string="Currency"/>
+        <field name="confidence"/>
+        <field name="pipeline_status"/>
+        <field name="file_name"     optional="hide"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="view_sb_invoice_form" model="ir.ui.view">
+    <field name="name">smart.billing.invoice.form</field>
+    <field name="model">smart.billing.invoice</field>
+    <field name="arch" type="xml">
+      <form>
+        <header>
+          <button name="action_push_to_odoo" string="Push to Odoo" type="object"
+                  class="btn-primary" invisible="pipeline_status != 'pending'"
+                  confirm="This will create a vendor bill in Odoo. Continue?"/>
+          <button name="action_reject" string="Reject" type="object"
+                  class="btn-danger" invisible="pipeline_status in ('pushed', 'rejected')"
+                  confirm="Reject this invoice?"/>
+          <field name="pipeline_status" widget="statusbar" statusbar_visible="pending"/>
+        </header>
+
+        <sheet>
+          <group string="Pipeline Info">
+            <field name="confidence"/>
+            <field name="file_name"/>
+            <field name="odoo_invoice_id" string="Odoo Bill ID" invisible="not odoo_invoice_id"/>
+            <field name="check_supplier" widget="boolean_toggle"/>
+            <field name="check_amounts"  widget="boolean_toggle"/>
+            <field name="check_rules"    widget="boolean_toggle"/>
+          </group>
+
+          <field name="has_invoice_image" invisible="1"/>
+
+          <div invisible="not has_invoice_image" class="o_sb_side_by_side">
+            <div class="o_sb_img_col">
+              <div class="o_sb_col_title">Invoice Preview</div>
+              <field name="invoice_image" widget="image" nolabel="1"/>
+            </div>
+            <div class="o_sb_fields_col">
+              <div class="o_sb_col_title">Invoice Details</div>
+              <group>
+                <field name="supplier_name"  string="Supplier"/>
+                <field name="invoice_number" string="Invoice #"/>
+                <field name="invoice_date"   string="Date"/>
+                <field name="currency_code"  string="Currency"/>
+                <field name="total_ht"       string="Total HT"/>
+                <field name="vat_amount"     string="VAT"/>
+                <field name="total_ttc"      string="Total TTC"/>
+              </group>
+            </div>
+          </div>
+
+          <group invisible="has_invoice_image" string="Invoice Details">
+            <field name="supplier_name"  string="Supplier"/>
+            <field name="invoice_number" string="Invoice #"/>
+            <field name="invoice_date"   string="Date"/>
+            <field name="currency_code"  string="Currency"/>
+            <field name="total_ht"       string="Total HT"/>
+            <field name="vat_amount"     string="VAT"/>
+            <field name="total_ttc"      string="Total TTC"/>
+          </group>
+
+        </sheet>
+
+        <chatter/>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_sb_sync" model="ir.actions.server">
+    <field name="name">Sync from Pipeline</field>
+    <field name="model_id" ref="model_smart_billing_invoice"/>
+    <field name="binding_model_id" ref="model_smart_billing_invoice"/>
+    <field name="binding_view_types">list,kanban</field>
+    <field name="state">code</field>
+    <field name="code">
+count = env['smart.billing.invoice'].sync_from_pipeline()
+raise UserError(f'Sync complete — {count} invoice(s) imported.')
+    </field>
+  </record>
+
+  <record id="action_sb_invoices" model="ir.actions.act_window">
+    <field name="name">Invoice Pipeline</field>
+    <field name="res_model">smart.billing.invoice</field>
+    <field name="view_mode">kanban,list,form</field>
+    <field name="help" type="html">
+      <p class="o_view_nocontent_smiling_face">
+        No invoices yet — use Actions → Sync from Pipeline to import.
+      </p>
+    </field>
+  </record>
+
+  <menuitem id="menu_sb_root"     name="Smart Billing"     sequence="50"/>
+  <menuitem id="menu_sb_invoices" name="Invoice Pipeline"  sequence="10"
+            parent="menu_sb_root" action="action_sb_invoices"/>
+
+</odoo>
