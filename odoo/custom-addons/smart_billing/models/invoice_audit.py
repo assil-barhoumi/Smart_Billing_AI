@@ -23,6 +23,18 @@ def _pg_connect():
     return psycopg2.connect(**_PG)
 
 
+class SmartBillingInvoiceLine(models.Model):
+    _name        = 'smart.billing.invoice.line'
+    _description = 'Smart Billing – Invoice Line'
+
+    invoice_id  = fields.Many2one('smart.billing.invoice', ondelete='cascade')
+    description = fields.Char()
+    quantity    = fields.Float(digits=(16, 4))
+    unit_price  = fields.Float(digits=(16, 4))
+    total_line  = fields.Float(digits=(16, 4))
+    item_type   = fields.Char()
+
+
 class SmartBillingInvoice(models.Model):
     _name        = 'smart.billing.invoice'
     _description = 'Smart Billing – Invoice Review'
@@ -31,19 +43,22 @@ class SmartBillingInvoice(models.Model):
 
     pipeline_invoice_id = fields.Integer(string='Pipeline ID', readonly=True, index=True)
 
-    file_name      = fields.Char(readonly=True)
-    file_path      = fields.Char(readonly=True)
-    supplier_name  = fields.Char()
-    invoice_number = fields.Char()
-    invoice_date   = fields.Date()
-    total_ht       = fields.Float(digits=(16, 4))
-    vat_amount     = fields.Float(digits=(16, 4))
-    total_ttc      = fields.Float(digits=(16, 4))
-    currency_code  = fields.Char(size=10)
-    confidence     = fields.Float(digits=(4, 3), readonly=True)
-    extracted_json = fields.Text(readonly=True)
+    file_name        = fields.Char(readonly=True)
+    file_path        = fields.Char(readonly=True)
+    supplier_name    = fields.Char()
+    supplier_street  = fields.Char()
+    supplier_country = fields.Char()
+    invoice_number   = fields.Char()
+    invoice_date     = fields.Date()
+    total_ht         = fields.Float(digits=(16, 4))
+    vat_amount       = fields.Float(digits=(16, 4))
+    total_ttc        = fields.Float(digits=(16, 4))
+    currency_code    = fields.Char(size=10)
+    confidence       = fields.Float(digits=(4, 3), readonly=True)
+    extracted_json   = fields.Text(readonly=True)
     invoice_image     = fields.Binary(readonly=True, string='Invoice Preview', attachment=True)
     has_invoice_image = fields.Boolean(readonly=True, default=False)
+    line_ids          = fields.One2many('smart.billing.invoice.line', 'invoice_id', string='Line Items')
 
     check_supplier = fields.Boolean(string='Supplier Known', readonly=True)
     check_amounts  = fields.Boolean(string='Amounts Valid',  readonly=True)
@@ -77,18 +92,31 @@ class SmartBillingInvoice(models.Model):
         total_ttc  = float(row.get('total_ttc')        or 0)
         confidence = float(row.get('confidence_score') or 0)
 
+        raw = row.get('extracted_json') or {}
+        extracted = raw if isinstance(raw, dict) else (json.loads(raw) if raw else {})
+
+        line_items = extracted.get('line_items') or []
         vals = {
             'pipeline_invoice_id': row['id'],
             'file_path'          : file_path,
             'file_name'          : Path(file_path).name if file_path else '',
             'supplier_name'      : supplier,
+            'supplier_street'    : extracted.get('supplier_street')  or '',
+            'supplier_country'   : extracted.get('supplier_country') or '',
             'invoice_number'     : row.get('invoice_number') or '',
             'total_ht'           : total_ht,
             'vat_amount'         : vat,
             'total_ttc'          : total_ttc,
             'currency_code'      : row.get('currency')       or '',
             'confidence'         : confidence,
-            'extracted_json'     : json.dumps(row.get('extracted_json') or {}),
+            'extracted_json'     : json.dumps(extracted),
+            'line_ids'           : [(5, 0, 0)] + [(0, 0, {
+                'description': item.get('description') or '',
+                'quantity'   : float(item.get('quantity')   or 1.0),
+                'unit_price' : float(item.get('unit_price') or 0.0),
+                'total_line' : float(item.get('total_line') or 0.0),
+                'item_type'  : item.get('item_type') or '',
+            }) for item in line_items],
             **self._derive_checks(supplier, total_ht, vat, total_ttc, confidence),
         }
         if row.get('invoice_date'):
@@ -180,36 +208,53 @@ class SmartBillingInvoice(models.Model):
         if not file_path:
             return 0
 
-        try:
-            conn = _pg_connect()
-            try:
-                cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-                cur.execute("""
-                    SELECT id, file_path,
-                           supplier_name, invoice_number, invoice_date,
-                           total_ht, vat_amount, total_ttc, currency,
-                           confidence_score, extracted_json
-                    FROM   invoices
-                    WHERE  file_path = %s
-                    LIMIT  1
-                """, (file_path,))
-                row = cur.fetchone()
-            finally:
-                conn.close()
-        except Exception as e:
-            _logger.warning('SmartBilling bridge: %s', e)
-            return 0
+        supplier   = audit_data.get('supplier_name')   or 'Unknown'
+        total_ht   = float(audit_data.get('total_ht')    or 0)
+        vat        = float(audit_data.get('vat_amount')  or 0)
+        total_ttc  = float(audit_data.get('total_ttc')   or 0)
+        confidence = float(audit_data.get('confidence')  or 0)
 
-        if not row:
-            return 0
+        line_items = audit_data.get('line_items') or []
+        vals = {
+            'file_path'       : file_path,
+            'file_name'       : audit_data.get('file_name') or Path(file_path).name,
+            'supplier_name'   : supplier,
+            'supplier_street' : audit_data.get('supplier_street')  or '',
+            'supplier_country': audit_data.get('supplier_country') or '',
+            'invoice_number'  : audit_data.get('invoice_number')   or '',
+            'total_ht'        : total_ht,
+            'vat_amount'      : vat,
+            'total_ttc'       : total_ttc,
+            'currency_code'   : audit_data.get('currency_code')    or '',
+            'confidence'      : confidence,
+            'extracted_json'  : audit_data.get('extracted_json')   or '{}',
+            'line_ids'        : [(5, 0, 0)] + [(0, 0, {
+                'description': item.get('description') or '',
+                'quantity'   : float(item.get('quantity')   or 1.0),
+                'unit_price' : float(item.get('unit_price') or 0.0),
+                'total_line' : float(item.get('total_line') or 0.0),
+                'item_type'  : item.get('item_type') or '',
+            }) for item in line_items],
+            **self._derive_checks(supplier, total_ht, vat, total_ttc, confidence),
+        }
+        if audit_data.get('invoice_date'):
+            vals['invoice_date'] = audit_data['invoice_date']
 
-        record_id = self._upsert_from_row(dict(row))
-        if record_id:
-            image = audit_data.get('image_data') or False
-            self.browse(record_id).write({
-                'invoice_image'   : image,
-                'has_invoice_image': bool(image),
-            })
+        existing = self.search([('file_path', '=', file_path)], limit=1)
+        if existing and existing.pipeline_status in TERMINAL:
+            return existing.id
+        if existing:
+            existing.write(vals)
+            record_id = existing.id
+        else:
+            vals['pipeline_status'] = 'pending'
+            record_id = self.create(vals).id
+
+        image = audit_data.get('image_data') or False
+        self.browse(record_id).write({
+            'invoice_image'    : image,
+            'has_invoice_image': bool(image),
+        })
         return record_id
 
     def _get_or_create_partner(self, name):
@@ -230,15 +275,11 @@ class SmartBillingInvoice(models.Model):
                 line['account_id'] = account_id
             return (0, 0, line)
 
-        try:
-            items = json.loads(rec.extracted_json or '{}').get('line_items', [])
-            lines = [make_line(
-                item.get('description', 'Item'),
-                float(item.get('quantity',   1.0)),
-                float(item.get('unit_price', 0.0)),
-            ) for item in items]
-        except (json.JSONDecodeError, TypeError, KeyError):
-            lines = []
+        lines = [make_line(
+            l.description or 'Item',
+            l.quantity    or 1.0,
+            l.unit_price  or 0.0,
+        ) for l in rec.line_ids]
 
         return lines or [make_line(
             f'Invoice {rec.invoice_number or ""}',

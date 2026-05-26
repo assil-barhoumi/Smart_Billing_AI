@@ -116,26 +116,50 @@
             <div class="o_sb_fields_col">
               <div class="o_sb_col_title">Invoice Details</div>
               <group>
-                <field name="supplier_name"  string="Supplier"/>
-                <field name="invoice_number" string="Invoice #"/>
-                <field name="invoice_date"   string="Date"/>
-                <field name="currency_code"  string="Currency"/>
-                <field name="total_ht"       string="Total HT"/>
-                <field name="vat_amount"     string="VAT"/>
-                <field name="total_ttc"      string="Total TTC"/>
+                <field name="supplier_name"    string="Supplier"/>
+                <field name="supplier_street"  string="Address"/>
+                <field name="supplier_country" string="Country"/>
+                <field name="invoice_number"   string="Invoice #"/>
+                <field name="invoice_date"     string="Date"/>
+                <field name="currency_code"    string="Currency"/>
+                <field name="total_ht"         string="Total HT"/>
+                <field name="vat_amount"       string="VAT"/>
+                <field name="total_ttc"        string="Total TTC"/>
               </group>
+              <field name="line_ids" string="Line Items">
+                <list editable="bottom">
+                  <field name="description"/>
+                  <field name="quantity"/>
+                  <field name="unit_price" string="Unit Price"/>
+                  <field name="total_line" string="Total"/>
+                  <field name="item_type"  string="Type"/>
+                </list>
+              </field>
             </div>
           </div>
 
-          <group invisible="has_invoice_image" string="Invoice Details">
-            <field name="supplier_name"  string="Supplier"/>
-            <field name="invoice_number" string="Invoice #"/>
-            <field name="invoice_date"   string="Date"/>
-            <field name="currency_code"  string="Currency"/>
-            <field name="total_ht"       string="Total HT"/>
-            <field name="vat_amount"     string="VAT"/>
-            <field name="total_ttc"      string="Total TTC"/>
-          </group>
+          <div invisible="has_invoice_image">
+            <group string="Invoice Details">
+              <field name="supplier_name"    string="Supplier"/>
+              <field name="supplier_street"  string="Address"/>
+              <field name="supplier_country" string="Country"/>
+              <field name="invoice_number"   string="Invoice #"/>
+              <field name="invoice_date"     string="Date"/>
+              <field name="currency_code"    string="Currency"/>
+              <field name="total_ht"         string="Total HT"/>
+              <field name="vat_amount"       string="VAT"/>
+              <field name="total_ttc"        string="Total TTC"/>
+            </group>
+            <field name="line_ids" string="Line Items">
+              <list editable="bottom">
+                <field name="description"/>
+                <field name="quantity"/>
+                <field name="unit_price" string="Unit Price"/>
+                <field name="total_line" string="Total"/>
+                <field name="item_type"  string="Type"/>
+              </list>
+            </field>
+          </div>
 
         </sheet>
 

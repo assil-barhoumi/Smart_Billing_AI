@@ -1,3 +1,4 @@
+import base64
 import json
 import xmlrpc.client
 from pathlib import Path
@@ -30,20 +31,29 @@ def send_invoice(file_path: str, result: dict) -> int | None:
 
         extracted = result.get("extracted") or {}
 
+        image_data = ''
+        try:
+            with open(file_path, 'rb') as f:
+                image_data = base64.b64encode(f.read()).decode()
+        except Exception:
+            pass
+
         audit_data = {
-            "file_name"      : Path(file_path).name,
-            "file_path"      : str(file_path),
-            "supplier_name"  : extracted.get("supplier_name", ""),
-            "invoice_number" : extracted.get("invoice_number", ""),
-            "invoice_date"   : str(extracted.get("invoice_date") or extracted.get("date") or ""),
-            "total_ht"       : float(extracted.get("total_ht")    or 0.0),
-            "vat_amount"     : float(extracted.get("vat_amount")  or 0.0),
-            "total_ttc"      : float(extracted.get("total_ttc")   or 0.0),
-            "currency_code"  : str(extracted.get("currency", "") or ""),
-            "confidence"     : float(extracted.get("confidence")  or 0.0),
-            "pipeline_status": result.get("status", "extracted"),
-            "flags"          : ", ".join(result.get("flags") or []),
-            "extracted_json" : json.dumps(extracted, default=str),
+            "image_data"      : image_data,
+            "file_name"       : Path(file_path).name,
+            "file_path"       : str(file_path),
+            "supplier_name"   : extracted.get("supplier_name",    ""),
+            "supplier_street" : extracted.get("supplier_street",  ""),
+            "supplier_country": extracted.get("supplier_country", ""),
+            "invoice_number"  : extracted.get("invoice_number",   ""),
+            "invoice_date"    : str(extracted.get("invoice_date") or extracted.get("date") or ""),
+            "total_ht"        : float(extracted.get("total_ht")   or 0.0),
+            "vat_amount"      : float(extracted.get("vat_amount") or 0.0),
+            "total_ttc"       : float(extracted.get("total_ttc")  or 0.0),
+            "currency_code"   : str(extracted.get("currency",  "") or ""),
+            "confidence"      : float(extracted.get("confidence") or 0.0),
+            "line_items"      : extracted.get("line_items") or [],
+            "extracted_json"  : json.dumps(extracted, default=str),
         }
 
         record_id = models.execute_kw(
@@ -57,4 +67,3 @@ def send_invoice(file_path: str, result: dict) -> int | None:
     except Exception as e:
         print(f"[OdooBridge] Warning: could not send invoice to Odoo: {e}")
         return None
-
