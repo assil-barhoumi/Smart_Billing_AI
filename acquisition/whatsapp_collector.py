@@ -11,7 +11,7 @@ from datetime import datetime
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # ---------- Configuration ----------
-SAVE_FOLDER = Path(__file__).resolve().parent.parent / "purchase_orders" / "whatsapp"
+SAVE_FOLDER = Path(__file__).resolve().parent.parent / "orders" / "informal_orders"
 SUPPORTED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".xlsx", ".csv", ".png", ".jpg", ".jpeg"}
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 DEFAULT_ENCODING = "utf-8"

@@ -11,8 +11,8 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from acquisition.common import (
-    SAVE_PO, SAVE_INFORMAL, SAVE_INVOICES,
-    PO_KEYWORDS, INFORMAL_KEYWORDS, INVOICE_KEYWORDS,
+    SAVE_INFORMAL, SAVE_INVOICES,
+    INFORMAL_KEYWORDS, INVOICE_KEYWORDS,
     SUPPORTED_EXTENSIONS, INVOICE_EXTENSIONS, TIMESTAMP_FORMAT,
     build_filepath, save_attachment, save_body,
 )
@@ -72,11 +72,6 @@ def process_mailbox(mail: imaplib.IMAP4_SSL) -> int:
         _, messages = mail.search(None, f'(UNSEEN SUBJECT "{keyword}")')
         for eid in messages[0].split():
             routing[eid] = (SAVE_INVOICES, "invoice")
-
-    for keyword in PO_KEYWORDS:
-        _, messages = mail.search(None, f'(UNSEEN SUBJECT "{keyword}")')
-        for eid in messages[0].split():
-            routing[eid] = (SAVE_PO, "purchase_order")
 
     print(f"  Found {len(routing)} unread email(s) matching subject keywords")
     saved_count = 0

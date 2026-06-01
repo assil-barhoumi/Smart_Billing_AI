@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS orders (
     file_hash       TEXT                        UNIQUE,     -- SHA-256
     status          CHARACTER VARYING           NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'valid', 'invalid', 'pushed', 'push_failed', 'needs_review')),
-    doc_type        CHARACTER VARYING,                  -- 'purchase_order' | 'informal_order'
+    doc_type        CHARACTER VARYING,                  -- 'informal_order'
     extracted_json  JSONB,
     confidence_score NUMERIC(3,2),                      -- Gemini extraction confidence (between 0 and 1)
     needs_review    BOOLEAN                 NOT NULL DEFAULT FALSE,

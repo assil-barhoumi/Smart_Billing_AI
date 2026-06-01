@@ -4,20 +4,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from llm          import call_gemini_po
 from llm_informal import call_gemini_informal
-from llm_invoice  import call_groq_invoice as call_invoice    # switch to call_ollama_invoice in production
-from checker      import validate_purchase_order
+from llm_invoice  import call_groq_invoice as call_invoice
+from checker      import validate_order
 from db.db        import update_extraction, update_invoice_extraction, get_status
 
 ROOT                = Path(__file__).resolve().parent.parent
-SUPPORTED_PO        = {".jpg", ".jpeg", ".png", ".pdf"}
 SUPPORTED_INFORMAL  = {".txt", ".csv", ".xlsx", ".xls", ".jpg", ".jpeg", ".png", ".pdf"}
 SUPPORTED_INVOICE   = {".jpg", ".jpeg", ".png", ".pdf"}
-PURCHASE_ORDERS_DIR = ROOT / "orders" / "purchase_orders"
 INFORMAL_ORDERS_DIR = ROOT / "orders" / "informal_orders"
 INVOICES_DIR        = ROOT / "invoices"
-RESULTS_PO          = ROOT / "results" / "purchase_order"
 RESULTS_INFORMAL    = ROOT / "results" / "informal_order"
 RESULTS_INVOICE     = ROOT / "results" / "invoice"
 
@@ -28,7 +24,7 @@ def process(file_path: Path, llm_fn, doc_type: str) -> dict:
     print(f"  [LLM] Sending {file_path.name} to Gemini...")
     extracted  = llm_fn(str(file_path))
     confidence = extracted.pop("confidence", None)
-    is_valid, issues = validate_purchase_order(extracted)
+    is_valid, issues = validate_order(extracted)
     update_extraction(str(file_path), doc_type, extracted, is_valid, confidence)
     return {
         "file":       file_path.name,
@@ -165,16 +161,10 @@ def run_invoice_batch():
 
 
 def run_batch(mode: str):
-    if mode == "po":
-        input_dir   = PURCHASE_ORDERS_DIR
-        results_dir = RESULTS_PO
-        supported   = SUPPORTED_PO
-        process_fn  = lambda f: process(f, call_gemini_po, "purchase_order")
-    else:
-        input_dir   = INFORMAL_ORDERS_DIR
-        results_dir = RESULTS_INFORMAL
-        supported   = SUPPORTED_INFORMAL
-        process_fn  = lambda f: process(f, call_gemini_informal, "informal_order")
+    input_dir   = INFORMAL_ORDERS_DIR
+    results_dir = RESULTS_INFORMAL
+    supported   = SUPPORTED_INFORMAL
+    process_fn  = lambda f: process(f, call_gemini_informal, "informal_order")
 
     if not input_dir.exists():
         print(f"Error: '{input_dir}' folder not found.")
@@ -219,9 +209,9 @@ def run_single(file_path: str, mode: str):
         print(f"Error: File not found: {file_path}")
         sys.exit(1)
 
-    supported   = SUPPORTED_PO   if mode == "po" else SUPPORTED_INFORMAL
-    results_dir = RESULTS_PO     if mode == "po" else RESULTS_INFORMAL
-    process_fn  = (lambda f: process(f, call_gemini_po, "purchase_order")) if mode == "po" else (lambda f: process(f, call_gemini_informal, "informal_order"))
+    supported   = SUPPORTED_INFORMAL
+    results_dir = RESULTS_INFORMAL
+    process_fn  = lambda f: process(f, call_gemini_informal, "informal_order")
 
     if path.suffix.lower() not in supported:
         print(f"Error: Unsupported format '{path.suffix}' for mode '{mode}'.")
@@ -241,16 +231,14 @@ if __name__ == "__main__":
 
     if not args:
         print("Usage:")
-        print("  python main.py po                  # batch all purchase orders")
         print("  python main.py informal            # batch all informal orders")
         print("  python main.py invoice             # batch all invoices")
-        print("  python main.py po <file>           # single purchase order")
         print("  python main.py informal <file>     # single informal order")
         sys.exit(0)
 
     mode = args[0]
-    if mode not in {"po", "informal", "invoice"}:
-        print(f"Error: Unknown mode '{mode}'. Use 'po', 'informal', or 'invoice'.")
+    if mode not in {"informal", "invoice"}:
+        print(f"Error: Unknown mode '{mode}'. Use 'informal' or 'invoice'.")
         sys.exit(1)
 
     if mode == "invoice":

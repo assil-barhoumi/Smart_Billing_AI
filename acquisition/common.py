@@ -7,11 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db.db import insert_order, insert_invoice
 
 ROOT              = Path(__file__).resolve().parent.parent
-SAVE_PO           = ROOT / "orders" / "purchase_orders"
 SAVE_INFORMAL     = ROOT / "orders" / "informal_orders"
 SAVE_INVOICES     = ROOT / "invoices"
 
-PO_KEYWORDS       = ["Purchase Order", "Bon de commande"]
 INFORMAL_KEYWORDS = ["Order", "commande", "Request", "Demande"]
 INVOICE_KEYWORDS  = ["Facture", "Invoice"]
 
@@ -19,16 +17,12 @@ SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".txt", ".csv", ".xlsx"
 INVOICE_EXTENSIONS   = {".pdf", ".png", ".jpg", ".jpeg"}
 TIMESTAMP_FORMAT     = "%Y%m%d_%H%M%S"
 
-SAVE_PO.mkdir(parents=True, exist_ok=True)
 SAVE_INFORMAL.mkdir(parents=True, exist_ok=True)
 SAVE_INVOICES.mkdir(parents=True, exist_ok=True)
 
 
 def classify_subject(subject: str) -> tuple[Path, str] | None:
     s = subject.lower()
-    for kw in PO_KEYWORDS:
-        if kw.lower() in s:
-            return SAVE_PO, "purchase_order"
     for kw in INVOICE_KEYWORDS:
         if kw.lower() in s:
             return SAVE_INVOICES, "invoice"

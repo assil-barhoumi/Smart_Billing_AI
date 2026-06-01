@@ -1,4 +1,4 @@
-def validate_purchase_order(data: dict) -> tuple[bool, list[str]]:
+def validate_order(data: dict) -> tuple[bool, list[str]]:
     issues = []
 
     # Without line_items → nothing to put in the Sale Order
